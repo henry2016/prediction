@@ -1,0 +1,163 @@
+---
+title: "Machine Learning Project"
+author: "Henry2016"
+date: "January 24, 2016"
+output: html_document
+---
+```{r set-options, echo=FALSE, cache=FALSE}
+options(width = 115)
+```
+
+## Introduction
+This report describes a student assignment for an online course, *Practical Machine Learning,* 
+by Johns Hopkins University.  It is intended for peer review by other students who have
+already completed the assignment, so some familiarity with common aspects of the assignment
+and dataset is assumed.
+
+The object of the assignment is to predict whether subjects performing a weight-lifting exercise
+are performing it properly, by analyzing data from multiple accelerometers. The original experiment
+that produced the weightlifting data was:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H.
+*Qualitative Activity Recognition of Weight Lifting Exercises.*
+Proceedings of 4th International Conference in Cooperation with SIGCHI
+(Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+## How the model was built
+The model was built in three phases:
+
+1. I downloaded the training and test datasets from the web, and saved them as
+local files, to avoid the overhead of reading files from the Internet during each
+analysis. 
+
+2. Since the dataset was large but contained many variables that
+were mostly not sensor data, I reduced the training set by removing the dubious
+variables. 
+
+3. I trained a random forest in caret using 10-fold cross validation and
+parallel processing. I used a "random forest" model, since they are consistently
+amoung the most accurate predictors. The k-fold cross validation used 10 folds
+based on an analysis of the effect of various numbers of folds on bias and
+variance found [online.](http://appliedpredictivemodeling.com/blog/2014/11/27/vpuig01pqbklmi72b8lcl3ij5hj2qm)
+I used Parallel computation to speed up the training since I had a PC with
+eight cores, and found [a nice
+writeup from Leonard Greski](<https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md) explaining how to do it.
+
+Each of these 3 phases is described in more detail in the follwoing subsections.
+
+### 1. Obtaining the dataset
+First, the training and testing datasets were downloaded from the web, at
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv> and
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>, and stored
+as local CSV files, to avoid network overhead each time an analysis was run.
+
+### 2. Reducing the training dataset
+The dataset provided for training was huge, consisting of 19622 observations of 160 variables.
+However, many of those variables had many NA observations. Also, the first seven variables
+didn't appear to be sensor data, but rather metadata. I decided to remove the variables
+with a high probability of being NA, as well as those variables that appeared to
+contain non-accelerometer data, both to make the remaining dataset more tractable,
+and produce models that would be blind to the non-accelerometer data.
+
+The reduced training set was produced as follows:
+```{r tidy = TRUE}
+# Read the training file without converting strings to factors, but converting
+# missing strings to NA.
+df_train <- read.csv("pml-training.csv", as.is = TRUE, na.strings = c("NA", "", "#DIV/0"))
+
+# Get a subsample to check for NAs.
+ss = df_train[1:100, ]
+
+# Create the list of column names to drop.
+dropNames <- c(names(ss[,1:7]), names(na.action(na.omit(t(ss)))))
+
+# Create a new training set without the dropNames variables.
+newTrain <- df_train[, !(names(df_train) %in% dropNames)]
+#Change the dependent variable back to a factor.
+newTrain$classe <- factor(newTrain$classe)
+
+```
+This reduced the newTrain dataset to 19622 observations of 53 variables.
+
+### 3. Training a random forest in caret
+This was done as follows:
+```{r message = FALSE, tidy = TRUE, cache = TRUE}
+# If we have the model already cached, just use it
+fitCache <- "rf_fit.dat"
+if ( file.exists(fitCache) ) {
+    load(fitCache)
+} else {
+    # we need to actually compute the random-forest model.
+    # configure parallel processing
+    library(parallel, quietly = TRUE)
+    library(doParallel, quietly = TRUE)
+    cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+    registerDoParallel(cluster)
+    
+    # configure a trainControl object for 10-fold cv, using parallel processing.
+    library(caret, quietly = TRUE)
+    library(randomForest, quietly = TRUE)
+    fitControl <- trainControl( number = 10,   # 10-fold
+                                method = "cv", # cross validation
+                                repeats = 1,   # without repetition
+                                allowParallel = TRUE)
+    set.seed(123) # Help make things reproducible
+    rf_fit <- train(classe ~ ., method = "rf", data = newTrain,
+                 trControl = fitControl)
+    stopCluster(cluster) # Release the cores
+    save( rf_fit, file = fitCache)
+}
+# Now rf_fit has the random forest train object.
+rf_fit
+```
+
+
+## How cross validation was used
+As shown in the R code in the previous section, the caret train() module used 10-fold cross
+validation without replacement, as
+configured by the trControl parameter.
+
+Quoting from Julian Hartwell in [a discussion thread:](https://www.coursera.org/learn/practical-machine-learning/module/jTyf6/discussions/rZR-hL2IEeWlQwoU9G612w)
+
+*"RF produces an OOS during the model building process, so you do not need to do any cross validation of the model. But what you need to know is that RF has used cross validation to produce the OOS error rate! Cross validation is part of the random forest paradigm. That is how it is built. Cross validation would be unnecessary because it has already happened, not because RF is a special case that doesn't require it."*
+
+## Expected out-of-sample error
+Caret automatically computes and shows the predictive accuracy as the average accuracy
+of all 10 folds, for random forest models with the same value of the training parameter "mtry".
+As seen in the rf-fit display above,
+"The final value used for the model was mtry = 2."
+The corresponding accuracy for mtry = 2 is 0.9955667, with a standard deviation of
+0.001906288, resulting in a 95% confidence interval computed as follows:
+```{r tidy = TRUE, cache = TRUE}
+acc <- rf_fit$results$Accuracy[1]
+accsd <- rf_fit$results$AccuracySD[1]
+alpha <- 0.05
+ci <- c(qnorm( alpha/2, mean = acc, sd = accsd, lower.tail = TRUE),
+        qnorm( alpha/2, mean = acc, sd = accsd, lower.tail = FALSE))
+print( sprintf("Accuracy = %f, 95%% confidence interval = [%f, %f]",
+               acc, ci[1], ci[2]))
+```
+
+Since predicted test cases are either accurate or erroneous, the out-of-sample (OOS) error is (1 - predictive accuracy). So, the OOS error and its confidence interval can be computed as follows:
+```{r tidy = TRUE}
+
+se <- sprintf("OOS error = %f, 95%% confidence interval = [%f, %f]", 
+    1 - acc, 
+    1 - ci[2], 
+    1 - ci[1])
+print( se )
+```
+Simply put, **the expected out-of-sample error rate is around 0.4%, +/- 0.4%.**
+
+
+## Prediction of 20 different test cases
+
+I used the "predict" function to predict the 20 test cases from the previously trained random forest model,
+and formatted them for manual quiz entry, as follows:
+```{r tidy = TRUE, message = FALSE}
+df_test <- read.csv("pml-testing.csv")
+t(t(predict(rf_fit, newdata = df_test)))
+```
+
+
+
