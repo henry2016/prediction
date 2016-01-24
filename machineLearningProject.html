@@ -177,34 +177,6 @@ print(se)</code></pre>
 <pre><code>## [1] &quot;OOS error = 0.004433, 95% confidence interval = [0.000697, 0.008170]&quot;</code></pre>
 <p>Simply put, <strong>the expected out-of-sample error rate is around 0.4%, +/- 0.4%.</strong></p>
 </div>
-<div id="prediction-of-20-different-test-cases" class="section level2">
-<h2>Prediction of 20 different test cases</h2>
-<p>I used the “predict” function to predict the 20 test cases from the previously trained random forest model, and formatted them for manual quiz entry, as follows:</p>
-<pre class="r"><code>df_test &lt;- read.csv(&quot;pml-testing.csv&quot;)
-t(t(predict(rf_fit, newdata = df_test)))</code></pre>
-<pre><code>##       [,1]
-##  [1,] B   
-##  [2,] A   
-##  [3,] B   
-##  [4,] A   
-##  [5,] A   
-##  [6,] E   
-##  [7,] D   
-##  [8,] B   
-##  [9,] A   
-## [10,] A   
-## [11,] B   
-## [12,] C   
-## [13,] B   
-## [14,] A   
-## [15,] E   
-## [16,] E   
-## [17,] A   
-## [18,] B   
-## [19,] B   
-## [20,] B   
-## Levels: A B C D E</code></pre>
-</div>
 
 
 </div>
