@@ -150,14 +150,4 @@ print( se )
 Simply put, **the expected out-of-sample error rate is around 0.4%, +/- 0.4%.**
 
 
-## Prediction of 20 different test cases
-
-I used the "predict" function to predict the 20 test cases from the previously trained random forest model,
-and formatted them for manual quiz entry, as follows:
-```{r tidy = TRUE, message = FALSE}
-df_test <- read.csv("pml-testing.csv")
-t(t(predict(rf_fit, newdata = df_test)))
-```
-
-
 
